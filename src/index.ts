@@ -132,25 +132,21 @@ app.post(
     }
 
     const images = req.files as Express.Multer.File[];
-    const imagesData = images.map((image) => ({
-      url: image.path,
-      captureTime: new Date(),
-    }));
 
     const firstImage = images[0];
 
     const formData = new FormData();
     formData.append("upload", firstImage.buffer.toString("base64"));
 
-    const result: any = await axios.post(
-      "https://api.platerecognizer.com/v1/plate-reader/",
-      formData,
-      {
+    const result: any = await axios
+      .post("https://api.platerecognizer.com/v1/plate-reader/", formData, {
         headers: {
           Authorization: `Token d67da8cb1e381db35cead8b8a0c19fd794c03df7`,
         },
-      }
-    );
+      })
+      .catch((err) => {
+        console.error(err);
+      });
 
     const licensePlateResult = result.data;
 
@@ -167,7 +163,6 @@ app.post(
         where: { id: tenancy.id },
         data: {
           vehiclePlateNumber: licensePlate,
-          imageCaptures: { createMany: { data: imagesData } },
         },
       });
 
@@ -184,11 +179,6 @@ app.post(
         });
         return badRequest(res, "License plate does not match.");
       }
-
-      await prisma.tenancy.update({
-        where: { id: tenancy.id },
-        data: { imageCaptures: { createMany: { data: imagesData } } },
-      });
 
       io.of("/gate")
         .to(`connected_gates#${req.body.gateId}`)
