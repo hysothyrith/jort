@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import FormData from "form-data";
 import http from "http";
 import multer from "multer";
 import qrcode from "qrcode";
@@ -146,6 +147,7 @@ app.post(
         headers: {
           Authorization: `Token d67da8cb1e381db35cead8b8a0c19fd794c03df7`,
         },
+        // @ts-ignore
         body: formData,
       })
     ).json();
