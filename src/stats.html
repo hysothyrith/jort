@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Parking Lot</title>
+  </head>
+  <body>
+    <h1>Stats</h1>
+
+    <h2>Small vehicle capacity</h2>
+    <div id="smallVehicleCapacity">0</div>
+
+    <h2>Large vehicle capacity</h2>
+    <div id="largeVehicleCapacity">0</div>
+
+    <h2>Small vehicle capacity available</h2>
+    <div id="smallVehicleCapacityAvailable">0</div>
+
+    <h2>Large vehicle capacity available</h2>
+    <div id="largeVehicleCapacityAvailable">0</div>
+
+    <script>
+      const url =
+        "https://expressjs-prisma-production-0a4e.up.railway.app/captures";
+
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          images: [],
+          tenancyId: "",
+          gateId: "",
+        }),
+      });
+    </script>
+  </body>
+</html>

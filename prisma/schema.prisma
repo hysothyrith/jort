@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -10,9 +7,60 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model Todo {
-  id        String   @id @default(uuid())
-  createdAt DateTime @default(now())
-  text      String
-  completed Boolean
+model Partner {
+  id          String       @id @default(uuid())
+  name        String
+  parkingLots ParkingLot[]
+}
+
+model ParkingLot {
+  id                   String  @id @default(uuid())
+  name                 String
+  smallVehicleCapacity Int
+  largeVehicleCapacity Int
+  partner              Partner @relation(fields: [partnerId], references: [id])
+  partnerId            String
+  gates                Gate[]
+}
+
+model Gate {
+  id           String     @id @default(uuid())
+  name         String
+  parkingLot   ParkingLot @relation(fields: [parkingLotId], references: [id])
+  parkingLotId String
+  entries      Tenancy[]  @relation("Entries")
+  exits        Tenancy[]  @relation("Exits")
+}
+
+enum VehicleType {
+  SMALL
+  LARGE
+}
+
+model Tenancy {
+  id                 String         @id @default(uuid())
+  deviceId           String
+  vehiclePlateNumber String?
+  vechicleType       VehicleType?
+  imageCaptures      ImageCapture[]
+  entryTime          DateTime?
+  entryGate          Gate?          @relation(name: "Entries", fields: [entryGateId], references: [id])
+  entryGateId        String?
+  exitTime           DateTime?
+  exitGate           Gate?          @relation(name: "Exits", fields: [exitGateId], references: [id])
+  exitGateId         String?
+}
+
+model ImageCapture {
+  id          String   @id @default(uuid())
+  tenancy     Tenancy  @relation(fields: [tenancyId], references: [id])
+  tenancyId   String
+  url         String
+  captureTime DateTime
+}
+
+model ClientToken {
+  id       String  @id @default(uuid())
+  token    String
+  disabled Boolean @default(false)
 }
