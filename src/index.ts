@@ -138,67 +138,71 @@ app.post(
     const formData = new FormData();
     formData.append("upload", firstImage.buffer.toString("base64"));
 
-    // console.log(formData);
+    try {
+      const result: any = await axios.post(
+        "https://api.platerecognizer.com/v1/plate-reader/",
+        formData,
+        {
+          headers: {
+            Authorization: `Token d67da8cb1e381db35cead8b8a0c19fd794c03df7`,
+          },
+        }
+      );
 
-    const result: any = await axios
-      .post("https://api.platerecognizer.com/v1/plate-reader/", formData, {
-        headers: {
-          Authorization: `Token d67da8cb1e381db35cead8b8a0c19fd794c03df7`,
-        },
-      })
-      .catch((err) => {
-        console.error(err.response);
-      });
+      const licensePlateResult = result.data;
 
-    const licensePlateResult = result.data;
+      console.log({ licensePlateResult });
 
-    console.log({ licensePlateResult });
+      const licensePlate = licensePlateResult?.results?.length
+        ? licensePlateResult.results[0].plate
+        : null;
 
-    const licensePlate = licensePlateResult?.results?.length
-      ? licensePlateResult.results[0].plate
-      : null;
+      const isEntry = !Boolean(tenancy.exitGateId);
 
-    const isEntry = !Boolean(tenancy.exitGateId);
-
-    if (isEntry) {
-      await prisma.tenancy.update({
-        where: { id: tenancy.id },
-        data: {
-          vehiclePlateNumber: licensePlate,
-          entryTime: new Date(),
-        },
-      });
-
-      io.of("/gate")
-        .to(`connected_gates#${req.body.gateId}`)
-        .emit("toast", {
-          type: "success",
-          message: licensePlate ? `Welcome ${licensePlate}!` : "Welcome!",
+      if (isEntry) {
+        await prisma.tenancy.update({
+          where: { id: tenancy.id },
+          data: {
+            vehiclePlateNumber: licensePlate,
+            entryTime: new Date(),
+          },
         });
-    } else {
-      if (tenancy.vehiclePlateNumber !== licensePlate) {
-        io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("deny");
 
-        io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("toast", {
-          type: "error",
-          message: "License plate does not match.",
+        io.of("/gate")
+          .to(`connected_gates#${req.body.gateId}`)
+          .emit("toast", {
+            type: "success",
+            message: licensePlate ? `Welcome ${licensePlate}!` : "Welcome!",
+          });
+      } else {
+        if (tenancy.vehiclePlateNumber !== licensePlate) {
+          io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("deny");
+
+          io.of("/gate")
+            .to(`connected_gates#${req.body.gateId}`)
+            .emit("toast", {
+              type: "error",
+              message: "License plate does not match.",
+            });
+          return badRequest(res, "License plate does not match.");
+        }
+
+        await prisma.tenancy.update({
+          where: { id: tenancy.id },
+          data: { exitTime: new Date() },
         });
-        return badRequest(res, "License plate does not match.");
+
+        io.of("/gate")
+          .to(`connected_gates#${req.body.gateId}`)
+          .emit("toast", { type: "success", message: "Goodbye!" });
       }
 
-      await prisma.tenancy.update({
-        where: { id: tenancy.id },
-        data: { exitTime: new Date() },
-      });
+      io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("allow");
 
-      io.of("/gate")
-        .to(`connected_gates#${req.body.gateId}`)
-        .emit("toast", { type: "success", message: "Goodbye!" });
+      return success(res, { message: "OK" });
+    } catch (err: any) {
+      console.error(err.response);
     }
-
-    io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("allow");
-
-    return success(res, { message: "OK" });
   })
 );
 
