@@ -80,12 +80,12 @@ app.post(
     }
 
     const existingTenancy = await prisma.tenancy.findFirst({
-      where: { deviceId: deviceId, exitGateId: null, exitTime: null },
+      where: { deviceId: deviceId, exitTime: null },
     });
 
     if (!existingTenancy) {
       const tenancy = await prisma.tenancy.create({
-        data: { deviceId, entryGateId: gateId, entryTime: new Date() },
+        data: { deviceId, entryGateId: gateId },
         select: { id: true },
       });
 
@@ -102,7 +102,7 @@ app.post(
     } else {
       await prisma.tenancy.update({
         where: { id: existingTenancy.id },
-        data: { exitGateId: gateId, exitTime: new Date() },
+        data: { exitGateId: gateId },
       });
 
       io.of("/gate")
@@ -163,12 +163,16 @@ app.post(
         where: { id: tenancy.id },
         data: {
           vehiclePlateNumber: licensePlate,
+          entryTime: new Date(),
         },
       });
 
       io.of("/gate")
         .to(`connected_gates#${req.body.gateId}`)
-        .emit("toast", { type: "success", message: "Welcome!" });
+        .emit("toast", {
+          type: "success",
+          message: licensePlate ? `Welcome ${licensePlate}!` : "Welcome!",
+        });
     } else {
       if (tenancy.vehiclePlateNumber !== licensePlate) {
         io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("deny");
@@ -179,6 +183,11 @@ app.post(
         });
         return badRequest(res, "License plate does not match.");
       }
+
+      await prisma.tenancy.update({
+        where: { id: tenancy.id },
+        data: { exitTime: new Date() },
+      });
 
       io.of("/gate")
         .to(`connected_gates#${req.body.gateId}`)
