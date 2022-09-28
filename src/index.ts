@@ -68,8 +68,10 @@ io.of("/stats").on("connection", (socket) => {
 
     const smallVehicleCountInLot = await prisma.tenancy.count({
       where: {
-        entryGateId: { in: gatesInLot.map((gate) => gate.id) },
-        OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
+        OR: [
+          { entryGateId: { in: gatesInLot.map((gate) => gate.id) } },
+          { exitGateId: { in: gatesInLot.map((gate) => gate.id) } },
+        ],
         exitTime: null,
         vechicleType: VehicleType.SMALL,
       },
@@ -106,17 +108,14 @@ io.of("/stats").on("connection", (socket) => {
 async function refreshStats(parkingLotId: string) {
   const parkingLot = await prisma.parkingLot.findFirstOrThrow({
     where: { id: parkingLotId },
+    include: { gates: { select: { id: true } } },
   });
 
-  const gatesInLot = await prisma.gate.findMany({
-    where: { parkingLotId: parkingLotId },
-    select: { id: true },
-  });
+  const gateIds = parkingLot.gates.map((gate) => gate.id);
 
   const smallVehicleCountInLot = await prisma.tenancy.count({
     where: {
-      entryGateId: { in: gatesInLot.map((gate) => gate.id) },
-      OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
+      OR: [{ entryGateId: { in: gateIds } }, { exitGateId: { in: gateIds } }],
       exitTime: null,
       vechicleType: VehicleType.SMALL,
     },
@@ -127,8 +126,7 @@ async function refreshStats(parkingLotId: string) {
 
   const largeVehicleCountInLot = await prisma.tenancy.count({
     where: {
-      entryGateId: { in: gatesInLot.map((gate) => gate.id) },
-      OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
+      OR: [{ entryGateId: { in: gateIds } }, { exitGateId: { in: gateIds } }],
       exitTime: null,
       vechicleType: VehicleType.LARGE,
     },
@@ -284,6 +282,7 @@ app.post(
         io.of("/gate")
           .to(`connected_gates#${req.body.gateId}`)
           .emit("toast", { type: "success", message: "Goodbye!" });
+
         refreshStats(parkingLot.id);
       }
 
