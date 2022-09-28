@@ -1,9 +1,9 @@
+import axios from "axios";
 import cors from "cors";
 import express from "express";
 import FormData from "form-data";
 import http from "http";
 import multer from "multer";
-import fetch from "node-fetch";
 import qrcode from "qrcode";
 import { Server } from "socket.io";
 import { z } from "zod";
@@ -142,16 +142,15 @@ app.post(
     const formData = new FormData();
     formData.append("upload", firstImage.buffer.toString("base64"));
 
-    const licensePlateResult: any = await (
-      await fetch("https://api.platerecognizer.com/v1/plate-reader/", {
-        method: "POST",
+    const licensePlateResult: any = await axios.post(
+      "https://api.platerecognizer.com/v1/plate-reader/",
+      formData,
+      {
         headers: {
           Authorization: `Token d67da8cb1e381db35cead8b8a0c19fd794c03df7`,
         },
-        // @ts-ignore
-        body: formData,
-      })
-    ).json();
+      }
+    );
 
     console.log({ licensePlateResult });
 
