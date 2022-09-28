@@ -25,6 +25,10 @@ app.use(cors({ origin: "*" }));
 io.of("/gate").on("connection", (socket) => {
   socket.on("start", async (payload) => {
     if (await prisma.gate.findFirst({ where: { id: payload.gateId } })) {
+      io.of("/gate")
+        .to(`connected_gates#${payload.gateId}`)
+        .disconnectSockets();
+
       socket.join(`connected_gates#${payload.gateId}`);
 
       const qr = await qrcode.toDataURL(
