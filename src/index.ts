@@ -50,6 +50,7 @@ io.of("/stats").on("connection", (socket) => {
   socket.on("subscribe", async (payload) => {
     const parkingLot = await prisma.parkingLot.findFirst({
       where: { id: payload.parkingLotId },
+      include: { partner: true },
     });
     if (!parkingLot) {
       socket.emit("toast", {
@@ -59,16 +60,85 @@ io.of("/stats").on("connection", (socket) => {
       return;
     }
 
-    socket.join(`stats_subscription#${payload.parkingLotId}`);
+    const gatesInLot = await prisma.gate.findMany({
+      where: { parkingLotId: payload.parkingLotId },
+      select: { id: true },
+    });
 
-    socket.emit("changed", {
+    const smallVehicleCountInLot = await prisma.tenancy.count({
+      where: {
+        entryGateId: { in: gatesInLot.map((gate) => gate.id) },
+        OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
+        vechicleType: null,
+      },
+    });
+
+    const smallVehicleCapacityAvailable =
+      parkingLot.smallVehicleCapacity - smallVehicleCountInLot;
+
+    const largeVehicleCountInLot = await prisma.tenancy.count({
+      where: {
+        entryGateId: { in: gatesInLot.map((gate) => gate.id) },
+        OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
+        vechicleType: "LARGE",
+      },
+    });
+
+    const largeVehicleCapacityAvailable =
+      parkingLot.largeVehicleCapacity - largeVehicleCountInLot;
+
+    socket.join(`subscriptions#${payload.parkingLotId}`);
+
+    socket.emit("subscribed", {
+      smallVehicleCapacityAvailable,
+      largeVehicleCapacityAvailable,
+      parkingLotName: parkingLot.name,
+      partnerName: parkingLot.partner.name,
       smallVehicleCapacity: parkingLot.smallVehicleCapacity,
-      smallVehicleCapacityAvailable: 0,
       largeVehicleCapacity: parkingLot.largeVehicleCapacity,
-      largeVehicleCapacityAvailable: 0,
     });
   });
 });
+
+async function refreshStats(parkingLotId: string) {
+  const parkingLot = await prisma.parkingLot.findFirstOrThrow({
+    where: { id: parkingLotId },
+  });
+
+  const gatesInLot = await prisma.gate.findMany({
+    where: { parkingLotId: parkingLotId },
+    select: { id: true },
+  });
+
+  const smallVehicleCountInLot = await prisma.tenancy.count({
+    where: {
+      entryGateId: { in: gatesInLot.map((gate) => gate.id) },
+      OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
+      vechicleType: null,
+    },
+  });
+
+  const smallVehicleCapacityAvailable =
+    parkingLot.smallVehicleCapacity - smallVehicleCountInLot;
+
+  const largeVehicleCountInLot = await prisma.tenancy.count({
+    where: {
+      entryGateId: { in: gatesInLot.map((gate) => gate.id) },
+      OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
+      vechicleType: "LARGE",
+    },
+  });
+
+  const largeVehicleCapacityAvailable =
+    parkingLot.largeVehicleCapacity - largeVehicleCountInLot;
+
+  io.of("/stats").to(`subscriptions#${parkingLotId}`).emit("changed", {
+    smallVehicleCapacityAvailable,
+    largeVehicleCapacityAvailable,
+    smallVehicleCapacity: parkingLot.smallVehicleCapacity,
+    largeVehicleCapacity: parkingLot.largeVehicleCapacity,
+  });
+}
 
 app.post(
   "/scans",
@@ -161,6 +231,12 @@ app.post(
         ? licensePlateResult.results[0].plate
         : null;
 
+      const gate = await prisma.gate.findFirstOrThrow({
+        where: { id: req.body.gateId },
+        include: { parkingLot: true },
+      });
+      const parkingLot = gate.parkingLot;
+
       const isEntry = !Boolean(tenancy.exitGateId);
 
       if (isEntry) {
@@ -178,6 +254,8 @@ app.post(
             type: "success",
             message: licensePlate ? `Welcome ${licensePlate}!` : "Welcome!",
           });
+
+        refreshStats(parkingLot.id);
       } else {
         if (tenancy.vehiclePlateNumber !== licensePlate) {
           io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("deny");
@@ -199,6 +277,7 @@ app.post(
         io.of("/gate")
           .to(`connected_gates#${req.body.gateId}`)
           .emit("toast", { type: "success", message: "Goodbye!" });
+        refreshStats(parkingLot.id);
       }
 
       io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("allow");
