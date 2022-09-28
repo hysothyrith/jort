@@ -3,7 +3,6 @@ import express from "express";
 import http from "http";
 import multer from "multer";
 import qrcode from "qrcode";
-import { nanoid } from "nanoid";
 import { Server } from "socket.io";
 import { z } from "zod";
 import { validateRequest } from "zod-express-middleware";
@@ -14,19 +13,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 const port = process.env.PORT || 3000;
 
-const inferExtensionFromMimetype = (mimetype: string) =>
-  mimetype === "image/jpeg" ? "jpg" : "png";
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, "storage/uploads/");
-  },
-  filename: function (req, file, cb) {
-    const extension = inferExtensionFromMimetype(file.mimetype);
-
-    cb(null, `${nanoid()}.${extension}`);
-  },
-});
-const upload = multer({ storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json());
 app.use(express.raw({ type: "application/vnd.custom-type" }));
@@ -39,7 +26,8 @@ io.of("/gate").on("connection", (socket) => {
       socket.join(`connected_gates#${payload.gateId}`);
 
       const qr = await qrcode.toDataURL(
-        JSON.stringify({ gateId: payload.gateId })
+        JSON.stringify({ gateId: payload.gateId }),
+        { width: 500 }
       );
 
       socket.emit("connected", { qr });
@@ -49,6 +37,30 @@ io.of("/gate").on("connection", (socket) => {
         message: "Gate with given id does not exist.",
       });
     }
+  });
+});
+
+io.of("/stats").on("connection", (socket) => {
+  socket.on("subscribe", async (payload) => {
+    const parkingLot = await prisma.parkingLot.findFirst({
+      where: { id: payload.parkingLotId },
+    });
+    if (!parkingLot) {
+      socket.emit("toast", {
+        type: "error",
+        message: "Parking lot with given id does not exist.",
+      });
+      return;
+    }
+
+    socket.join(`stats_subscription#${payload.parkingLotId}`);
+
+    socket.emit("changed", {
+      smallVehicleCapacity: parkingLot.smallVehicleCapacity,
+      smallVehicleCapacityAvailable: 0,
+      largeVehicleCapacity: parkingLot.largeVehicleCapacity,
+      largeVehicleCapacityAvailable: 0,
+    });
   });
 });
 
@@ -123,18 +135,52 @@ app.post(
       captureTime: new Date(),
     }));
 
+    const firstImage = images[0];
+
+    const formData = new FormData();
+    formData.append("upload", firstImage.buffer.toString("base64"));
+
+    const licensePlateResult: any = await (
+      await fetch("https://api.platerecognizer.com/v1/plate-reader/", {
+        method: "POST",
+        headers: {
+          Authorization: `Token d67da8cb1e381db35cead8b8a0c19fd794c03df7`,
+        },
+        body: formData,
+      })
+    ).json();
+
+    console.log({ licensePlateResult });
+
+    const licensePlate = licensePlateResult?.results?.length
+      ? licensePlateResult.results[0].plate
+      : null;
+
     const isEntry = !Boolean(tenancy.exitGateId);
 
     if (isEntry) {
       await prisma.tenancy.update({
         where: { id: tenancy.id },
-        data: { imageCaptures: { createMany: { data: imagesData } } },
+        data: {
+          vehiclePlateNumber: licensePlate,
+          imageCaptures: { createMany: { data: imagesData } },
+        },
       });
 
       io.of("/gate")
         .to(`connected_gates#${req.body.gateId}`)
         .emit("toast", { type: "success", message: "Welcome!" });
     } else {
+      if (tenancy.vehiclePlateNumber !== licensePlate) {
+        io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("deny");
+
+        io.of("/gate").to(`connected_gates#${req.body.gateId}`).emit("toast", {
+          type: "error",
+          message: "License plate does not match.",
+        });
+        return badRequest(res, "License plate does not match.");
+      }
+
       await prisma.tenancy.update({
         where: { id: tenancy.id },
         data: { imageCaptures: { createMany: { data: imagesData } } },
