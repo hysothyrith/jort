@@ -138,6 +138,8 @@ app.post(
     const formData = new FormData();
     formData.append("upload", firstImage.buffer.toString("base64"));
 
+    // console.log(formData);
+
     const result: any = await axios
       .post("https://api.platerecognizer.com/v1/plate-reader/", formData, {
         headers: {
@@ -145,7 +147,7 @@ app.post(
         },
       })
       .catch((err) => {
-        console.error(err);
+        console.error(err.response);
       });
 
     const licensePlateResult = result.data;
