@@ -1,3 +1,4 @@
+import { VehicleType } from "@prisma/client";
 import axios from "axios";
 import cors from "cors";
 import express from "express";
@@ -69,7 +70,8 @@ io.of("/stats").on("connection", (socket) => {
       where: {
         entryGateId: { in: gatesInLot.map((gate) => gate.id) },
         OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
-        vechicleType: null,
+        exitTime: null,
+        vechicleType: VehicleType.SMALL,
       },
     });
 
@@ -80,7 +82,8 @@ io.of("/stats").on("connection", (socket) => {
       where: {
         entryGateId: { in: gatesInLot.map((gate) => gate.id) },
         OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
-        vechicleType: "LARGE",
+        exitTime: null,
+        vechicleType: VehicleType.LARGE,
       },
     });
 
@@ -114,7 +117,8 @@ async function refreshStats(parkingLotId: string) {
     where: {
       entryGateId: { in: gatesInLot.map((gate) => gate.id) },
       OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
-      vechicleType: null,
+      exitTime: null,
+      vechicleType: VehicleType.SMALL,
     },
   });
 
@@ -125,7 +129,8 @@ async function refreshStats(parkingLotId: string) {
     where: {
       entryGateId: { in: gatesInLot.map((gate) => gate.id) },
       OR: [{ exitGateId: { in: gatesInLot.map((gate) => gate.id) } }],
-      vechicleType: "LARGE",
+      exitTime: null,
+      vechicleType: VehicleType.LARGE,
     },
   });
 
@@ -231,19 +236,21 @@ app.post(
         ? licensePlateResult.results[0].plate
         : null;
 
-      const gate = await prisma.gate.findFirstOrThrow({
+      const { parkingLot } = await prisma.gate.findFirstOrThrow({
         where: { id: req.body.gateId },
         include: { parkingLot: true },
       });
-      const parkingLot = gate.parkingLot;
 
       const isEntry = !Boolean(tenancy.exitGateId);
 
       if (isEntry) {
+        const randomVehicleType =
+          Math.random() > 0.5 ? VehicleType.LARGE : VehicleType.SMALL;
         await prisma.tenancy.update({
           where: { id: tenancy.id },
           data: {
             vehiclePlateNumber: licensePlate,
+            vechicleType: randomVehicleType,
             entryTime: new Date(),
           },
         });
@@ -285,6 +292,7 @@ app.post(
       return success(res, { message: "OK" });
     } catch (err: any) {
       console.error(err.response);
+      throw err;
     }
   })
 );
