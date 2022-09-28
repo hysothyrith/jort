@@ -3,6 +3,7 @@ import express from "express";
 import FormData from "form-data";
 import http from "http";
 import multer from "multer";
+import fetch from "node-fetch";
 import qrcode from "qrcode";
 import { Server } from "socket.io";
 import { z } from "zod";

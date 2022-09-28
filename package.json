@@ -20,6 +20,7 @@
     "form-data": "^4.0.0",
     "multer": "^1.4.5-lts.1",
     "nanoid": "^3.0.0",
+    "node-fetch": "^3.2.10",
     "qrcode": "^1.5.1",
     "socket.io": "^4.5.2",
     "ws": "^8.8.1",
